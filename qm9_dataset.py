@@ -23,16 +23,16 @@ types = {'H': 0, 'C': 1, 'N': 2, 'O': 3, 'F': 4}
 
 class QM93D(InMemoryDataset):
     r"""
-        A `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/index.html>`_ data interface for :obj:`QM9` dataset 
+        A `Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/index.html>`_ data interface for :obj:`QM9` dataset
         which is from `"Quantum chemistry structures and properties of 134 kilo molecules" <https://www.nature.com/articles/sdata201422>`_ paper.
-        It connsists of about 130,000 equilibrium molecules with 12 regression targets: 
+        It connsists of about 130,000 equilibrium molecules with 12 regression targets:
         :obj:`mu`, :obj:`alpha`, :obj:`homo`, :obj:`lumo`, :obj:`gap`, :obj:`r2`, :obj:`zpve`, :obj:`U0`, :obj:`U`, :obj:`H`, :obj:`G`, :obj:`Cv`.
         Each molecule includes complete spatial information for the single low energy conformation of the atoms in the molecule.
 
         .. note::
             Based on the code of `QM9 in Pytorch Geometric <https://pytorch-geometric.readthedocs.io/en/latest/_modules/torch_geometric/datasets/qm9.html#QM9>`_.
 
-    
+
         Args:
             root (string): the dataset folder will be located at root/qm9.
             transform (callable, optional): A function/transform that takes in an
@@ -62,7 +62,7 @@ class QM93D(InMemoryDataset):
         Batch(Cv=[32], G=[32], H=[32], U=[32], U0=[32], alpha=[32], batch=[579], gap=[32], homo=[32], lumo=[32], mu=[32], pos=[579, 3], ptr=[33], r2=[32], y=[32], z=[579], zpve=[32])
 
         Where the attributes of the output data indicates:
-    
+
         * :obj:`z`: The atom type.
         * :obj:`pos`: The 3D position for atoms.
         * :obj:`y`: The target property for the graph (molecule).
@@ -97,7 +97,7 @@ class QM93D(InMemoryDataset):
                     osp.join(self.raw_dir, 'uncharacterized.txt'))
 
     def process(self):
-        
+
         with open(self.raw_paths[1], 'r') as f:
             target = [[float(x) for x in line.split(',')[1:20]]
                       for line in f.read().split('\n')[1:-1]]
@@ -122,10 +122,10 @@ class QM93D(InMemoryDataset):
             posc = pos - pos.mean(dim=0)
 
             atomic_number = []
-            
+
             for atom in mol.GetAtoms():
                 atomic_number.append(atom.GetAtomicNum())
-                
+
             z = torch.tensor(atomic_number, dtype=torch.long)
 
             data = Data(
@@ -142,15 +142,16 @@ class QM93D(InMemoryDataset):
             data_list = [data for data in data_list if self.pre_filter(data)]
         if self.pre_transform is not None:
             data_list = [self.pre_transform(data) for data in data_list]
-        
+
         data, slices = self.collate(data_list)
 
         print('Saving...')
         torch.save((data, slices), self.processed_paths[0])
 
-    def get_idx_split(self, data_size, train_size, valid_size, seed):
+    def get_idx_split(self, data_size, train_size, valid_size, test_size, seed):
         ids = shuffle(range(data_size), random_state=seed)
-        train_idx, val_idx, test_idx = torch.tensor(ids[:train_size]), torch.tensor(ids[train_size:train_size + valid_size]), torch.tensor(ids[train_size + valid_size:])
+        test_size = test_size or (len(ids) - train_size - valid_size)
+        train_idx, val_idx, test_idx = torch.tensor(ids[:train_size]), torch.tensor(ids[train_size:train_size + valid_size]), torch.tensor(ids[train_size + valid_size:train_size+valid_size + test_size])
         split_dict = {'train':train_idx, 'valid':val_idx, 'test':test_idx}
         return split_dict
 
