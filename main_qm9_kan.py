@@ -16,6 +16,10 @@ from kan import KANLayer
 
 # KAN - set specific layer to use KAN
 EquiMessagePassing.combiner = KANLayer
+FTE.combiner = KANLayer
+GatedEquivariantBlock.combiner = KANLayer
+S_vector.combiner = KANLayer
+LEFTNet.combiner = KANLayer
 
 def run(device, train_dataset, valid_dataset, test_dataset, model, scheduler_name, loss_func, epochs=800, batch_size=32, vt_batch_size=32, lr=0.0005, lr_decay_factor=0.5, lr_decay_step_size=50, weight_decay=0,
     save_dir='models/', log_dir='', disable_tqdm=False):
@@ -53,7 +57,7 @@ def run(device, train_dataset, valid_dataset, test_dataset, model, scheduler_nam
 
         # KAN - check if weight changes
         # print('Weight sample: '+str(model.message_layers[0].inv_proj[0].fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
-        print('Weight sample: '+str(model.message_layers[0].inv_proj.fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
+        # print('Weight sample: '+str(model.message_layers[0].inv_proj.fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
         train_mae = train(model, optimizer, scheduler, scheduler_name, train_loader, loss_func, device, disable_tqdm)
         valid_mae = val(model, valid_loader, device, disable_tqdm)
         test_mae = val(model, test_loader, device, disable_tqdm)
