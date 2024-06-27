@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 # KAN - search for 'combiner' to see all changed code
 import math
 from math import pi
@@ -11,6 +13,9 @@ from torch_geometric.nn import radius_graph
 from torch_geometric.nn.conv import MessagePassing
 from torch_scatter import scatter
 from kan import KANLayer
+
+def getIter(obj):
+    return obj if isinstance(obj,Iterable) else [obj]
 
 def nan_to_num(vec, num=0.0):
     idx = torch.isnan(vec)
@@ -80,10 +85,11 @@ class S_vector(MessagePassing):
     def __init__(self, hid_dim: int):
         super(S_vector, self).__init__(aggr='add')
         self.hid_dim = hid_dim
-        self.lin1 = nn.Sequential(
-            self.combiner(hid_dim,hid_dim),
-            # nn.Linear(hid_dim, hid_dim),
-            nn.SiLU())
+        self.lin1 = self.combiner(hid_dim,hid_dim)
+        # self.lin1 = nn.Sequential(
+        #     self.combiner(hid_dim,hid_dim),
+        #     # nn.Linear(hid_dim, hid_dim),
+        #     nn.SiLU())
 
     def forward(self, s, v, edge_index, emb):
         s = self.lin1(s)
@@ -110,20 +116,23 @@ class EquiMessagePassing(MessagePassing):
 
         self.hidden_channels = hidden_channels
         self.num_radial = num_radial
-        self.inv_proj = nn.Sequential(
-            self.combiner(3 * self.hidden_channels + self.num_radial, self.hidden_channels * 3),
-            # nn.Linear(3 * self.hidden_channels + self.num_radial, self.hidden_channels * 3),
-            nn.SiLU(inplace=True),
-            self.combiner(self.hidden_channels * 3, self.hidden_channels * 3), )
+        self.inv_proj = self.combiner(3 * self.hidden_channels + self.num_radial, self.hidden_channels * 3)
+        # self.inv_proj = nn.Sequential(
+        #     self.combiner(3 * self.hidden_channels + self.num_radial, self.hidden_channels * 3),
+        #     # nn.Linear(3 * self.hidden_channels + self.num_radial, self.hidden_channels * 3),
+        #     nn.SiLU(inplace=True),
+        #     self.combiner(self.hidden_channels * 3, self.hidden_channels * 3), )
             # nn.Linear(self.hidden_channels * 3, self.hidden_channels * 3), )
 
-        self.x_proj = nn.Sequential(
-            self.combiner(hidden_channels, hidden_channels),
-            # nn.Linear(hidden_channels, hidden_channels),
-            nn.SiLU(),
-            self.combiner(hidden_channels, hidden_channels * 3),
-            # nn.Linear(hidden_channels, hidden_channels * 3),
-        )
+        self.x_proj = self.combiner(hidden_channels, hidden_channels * 3)
+        # self.x_proj = nn.Sequential(
+        #     self.combiner(hidden_channels, hidden_channels),
+        #     # nn.Linear(hidden_channels, hidden_channels),
+        #     nn.SiLU(),
+        #     self.combiner(hidden_channels, hidden_channels * 3),
+        #     # nn.Linear(hidden_channels, hidden_channels * 3),
+        # )
+
         self.rbf_proj = self.combiner(num_radial, hidden_channels * 3)
         # self.rbf_proj = nn.Linear(num_radial, hidden_channels * 3)
 
@@ -134,7 +143,7 @@ class EquiMessagePassing(MessagePassing):
 
     def reset_parameters(self):
         if self.combiner == KANLayer:
-          for x in self.x_proj:
+          for x in getIter(self.x_proj):
               if type(x) == KANLayer:
                 x.reset_parameters()
         else:
@@ -205,13 +214,14 @@ class FTE(nn.Module):
         #     hidden_channels, hidden_channels * 2, bias=False
         # )
 
-        self.xequi_proj = nn.Sequential(
-            self.combiner(hidden_channels * 2, hidden_channels),
-            # nn.Linear(hidden_channels * 2, hidden_channels),
-            nn.SiLU(),
-            self.combiner(hidden_channels, hidden_channels * 3),
-            # nn.Linear(hidden_channels, hidden_channels * 3),
-        )
+        self.xequi_proj = self.combiner(hidden_channels * 2, hidden_channels * 3)
+        # self.xequi_proj = nn.Sequential(
+        #     self.combiner(hidden_channels * 2, hidden_channels),
+        #     # nn.Linear(hidden_channels * 2, hidden_channels),
+        #     nn.SiLU(),
+        #     self.combiner(hidden_channels, hidden_channels * 3),
+        #     # nn.Linear(hidden_channels, hidden_channels * 3),
+        # )
 
         self.inv_sqrt_2 = 1 / math.sqrt(2.0)
         self.inv_sqrt_h = 1 / math.sqrt(hidden_channels)
@@ -220,10 +230,13 @@ class FTE(nn.Module):
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.equi_proj.weight)
-        nn.init.xavier_uniform_(self.xequi_proj[0].weight)
-        self.xequi_proj[0].bias.data.fill_(0)
-        nn.init.xavier_uniform_(self.xequi_proj[2].weight)
-        self.xequi_proj[2].bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.xequi_proj.weight)
+        self.xequi_proj.bias.data.fill_(0)
+
+        # nn.init.xavier_uniform_(self.xequi_proj[0].weight)
+        # self.xequi_proj[0].bias.data.fill_(0)
+        # nn.init.xavier_uniform_(self.xequi_proj[2].weight)
+        # self.xequi_proj[2].bias.data.fill_(0)
 
     def forward(self, x, vec, node_frame):
 
@@ -285,7 +298,7 @@ class EquiOutput(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        for layer in self.output_network:
+        for layer in getIter(self.output_network):
             layer.reset_parameters()
 
     def forward(self, x, vec):
@@ -321,13 +334,14 @@ class GatedEquivariantBlock(nn.Module):
         self.vec2_proj = self.combiner(hidden_channels, out_channels, bias=False)
         # self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
 
-        self.update_net = nn.Sequential(
-            self.combiner(hidden_channels * 2, hidden_channels),
-            # nn.Linear(hidden_channels * 2, hidden_channels),
-            nn.SiLU(),
-            self.combiner(hidden_channels, out_channels * 2),
-            # nn.Linear(hidden_channels, out_channels * 2),
-        )
+        self.update_net = self.combiner(hidden_channels * 2, out_channels * 2)
+        # self.update_net = nn.Sequential(
+        #     self.combiner(hidden_channels * 2, hidden_channels),
+        #     # nn.Linear(hidden_channels * 2, hidden_channels),
+        #     nn.SiLU(),
+        #     self.combiner(hidden_channels, out_channels * 2),
+        #     # nn.Linear(hidden_channels, out_channels * 2),
+        # )
 
         self.act = nn.SiLU()
 
@@ -381,23 +395,25 @@ class LEFTNet(torch.nn.Module):
 
         self.z_emb = Embedding(95, hidden_channels)
         self.radial_emb = rbf_emb(num_radial, self.cutoff)
-        self.radial_lin = nn.Sequential(
-            self.combiner(num_radial, hidden_channels),
-            # nn.Linear(num_radial, hidden_channels),
-            nn.SiLU(inplace=True),
-            self.combiner(hidden_channels, hidden_channels))
-            # nn.Linear(hidden_channels, hidden_channels))
+        self.radial_lin = self.combiner(num_radial, hidden_channels)
+        # self.radial_lin = nn.Sequential(
+        #     self.combiner(num_radial, hidden_channels),
+        #     # nn.Linear(num_radial, hidden_channels),
+        #     nn.SiLU(inplace=True),
+        #     self.combiner(hidden_channels, hidden_channels))
+        #     # nn.Linear(hidden_channels, hidden_channels))
 
         self.neighbor_emb = NeighborEmb(hidden_channels)
 
         self.S_vector = S_vector(hidden_channels)
 
-        self.lin = nn.Sequential(
-            self.combiner(3, hidden_channels // 4),
-            # nn.Linear(3, hidden_channels // 4),
-            nn.SiLU(inplace=True),
-            self.combiner(hidden_channels // 4, 1))
-            # nn.Linear(hidden_channels // 4, 1))
+        self.lin = self.combiner(3, 1)
+        # self.lin = nn.Sequential(
+        #     self.combiner(3, hidden_channels // 4),
+        #     # nn.Linear(3, hidden_channels // 4),
+        #     nn.SiLU(inplace=True),
+        #     self.combiner(hidden_channels // 4, 1))
+        #     # nn.Linear(hidden_channels // 4, 1))
 
         self.message_layers = nn.ModuleList()
         self.FTEs = nn.ModuleList()
@@ -422,15 +438,15 @@ class LEFTNet(torch.nn.Module):
 
     def reset_parameters(self):
         self.radial_emb.reset_parameters()
-        for layer in self.message_layers:
+        for layer in getIter(self.message_layers):
             layer.reset_parameters()
         for layer in self.FTEs:
             layer.reset_parameters()
         self.last_layer.reset_parameters()
-        for layer in self.radial_lin:
+        for layer in getIter(self.radial_lin):
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
-        for layer in self.lin:
+        for layer in getIter(self.lin):
             if hasattr(layer, 'reset_parameters'):
                 layer.reset_parameters()
 

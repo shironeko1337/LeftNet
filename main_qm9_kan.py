@@ -52,7 +52,8 @@ def run(device, train_dataset, valid_dataset, test_dataset, model, scheduler_nam
         t_start = time.perf_counter()
 
         # KAN - check if weight changes
-        print('Weight sample: '+str(model.message_layers[0].inv_proj[0].fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
+        # print('Weight sample: '+str(model.message_layers[0].inv_proj[0].fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
+        print('Weight sample: '+str(model.message_layers[0].inv_proj.fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
         train_mae = train(model, optimizer, scheduler, scheduler_name, train_loader, loss_func, device, disable_tqdm)
         valid_mae = val(model, valid_loader, device, disable_tqdm)
         test_mae = val(model, test_loader, device, disable_tqdm)
