@@ -4,10 +4,10 @@ import torch.nn as nn
 import numpy as np
 
 class KANLayer(nn.Module):
-    def __init__(self, inputdim, outdim, gridsize=5, addbias=True):
+    def __init__(self, inputdim, outdim, gridsize=5, addbias=True,bias = True):
         super(KANLayer,self).__init__()
         self.gridsize= gridsize
-        self.addbias = addbias
+        self.addbias = addbias and bias
         self.inputdim = inputdim
         self.outdim = outdim
         self.reset_parameters()

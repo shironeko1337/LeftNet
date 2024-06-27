@@ -229,9 +229,11 @@ class FTE(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.equi_proj.weight)
-        nn.init.xavier_uniform_(self.xequi_proj.weight)
-        self.xequi_proj.bias.data.fill_(0)
+        self.equi_proj.reset_parameters()
+        self.xequi_proj.reset_parameters()
+        # nn.init.xavier_uniform_(self.equi_proj.weight)
+        # nn.init.xavier_uniform_(self.xequi_proj.weight)
+        # self.xequi_proj.bias.data.fill_(0)
 
         # nn.init.xavier_uniform_(self.xequi_proj[0].weight)
         # self.xequi_proj[0].bias.data.fill_(0)
