@@ -26,7 +26,7 @@ def run(device, train_dataset, valid_dataset, test_dataset, model, scheduler_nam
 
     model = model.to(device)
     num_params = sum(p.numel() for p in model.parameters())
-    print('num_parameters:', num_params)
+    # print('num_parameters:', num_params)
 
     train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
     valid_loader = DataLoader(valid_dataset, vt_batch_size, shuffle=False)
@@ -56,6 +56,7 @@ def run(device, train_dataset, valid_dataset, test_dataset, model, scheduler_nam
         t_start = time.perf_counter()
 
         # KAN - check if weight changes
+        # print('Weight sample: '+str(model.message_layers[0].inv_proj[0].w)+'\n')
         # print('Weight sample: '+str(model.message_layers[0].inv_proj[0].fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
         # print('Weight sample: '+str(model.message_layers[0].inv_proj.fouriercoeffs[0][0][0][0].detach().numpy().item())+'\n')
         train_mae = train(model, optimizer, scheduler, scheduler_name, train_loader, loss_func, device, disable_tqdm)

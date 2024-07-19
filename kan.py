@@ -1,52 +1,62 @@
+
+from torch import nn
 import torch
-import torch.nn as nn
 
-import numpy as np
-
+from bsplines import BatchedBSplines
 class KANLayer(nn.Module):
-    def __init__(self, inputdim, outdim, gridsize=5, addbias=True,bias = True):
-        super(KANLayer,self).__init__()
-        self.gridsize= gridsize
-        self.addbias = addbias and bias
-        self.inputdim = inputdim
-        self.outdim = outdim
+    CPS_INIT_STD = 0.1
+    UPDATE_CPS_N_EVAL = 32
+
+    def __init__(self, inDim, outDim, k = 3, nCps = 6, bias = False):
+        super(KANLayer, self).__init__()
+        self.k = k
+        self.inDim = inDim
+        self.outDim = outDim
+        self.silu = nn.SiLU()
+        self.nCps = nCps
         self.reset_parameters()
+        
+        self.kan = nn.Sequential(self)
 
-    # KAN - reset parameters, needed for leftnet
+    def forward(self, x):
+        return self.kan(x)
+
     def reset_parameters(self):
-        self.fouriercoeffs = nn.Parameter(torch.randn(2, self.outdim, self.inputdim, self.gridsize) /
-                                             (np.sqrt(self.inputdim) * np.sqrt(self.gridsize)))
-        if self.addbias:
-            self.bias = nn.Parameter(torch.zeros(1, self.outdim))
+        self.splines = BatchedBSplines(self.nCps, self.k)
+        self.cps = nn.Parameter(
+            (torch.randn(self.inDim, self.outDim, self.nCps) * self.CPS_INIT_STD)
+        )
+        self.w = nn.Parameter(
+            torch.randn(2, self.inDim, self.outDim, 1) * (2 / (self.inDim * self.outDim)) ** 0.5
+        )
 
-    def forward(self,x):
-        xshp = x.shape
-        outshape = xshp[0:-1] + (self.outdim,)
-        # x = x.view(-1, self.inputdim)
-        x = torch.reshape(x,(-1,self.inputdim))
-          #Starting at 1 because constant terms are in the bias
-        k = torch.reshape(torch.arange(1, self.gridsize+1, device=x.device), (1, 1, 1, self.gridsize))
-        xrshp = x.view(x.shape[0], 1, x.shape[1], 1)
-        #This should be fused to avoid materializing memory
-        c = torch.cos(k * xrshp)
-        s = torch.sin(k * xrshp)
+    def updateCps(self, newNCps):
+        newNCps = max(newNCps,self.k+1) #Avoid having less control points than the degree of the B-splines.
+        #Generate a linear grid of points to evaluate the splines.
+        x = torch.linspace(*self.splines.X_RANGE, self.UPDATE_CPS_N_EVAL).unsqueeze(0).unsqueeze(0).expand(-1, self.inDim, -1)
+        # Get the current splines curves evaluated for x
+        B = self.splines(x, self.cps)  # (1, inDim, outDim, nEval).
+        #Create new BatchedBSplines object with the new number of control points.
+        newSplines = BatchedBSplines(newNCps, self.k)
+        #Retrieve Bi,p(x) values.
+        A = newSplines._bSplines(x)  # (1, inDim, nEval, nCps)
+        #Solve the least square problem to find the new control points values.
+        # min ||A * X - B||_{fro}
+        newCps = torch.linalg.lstsq(A, B.moveaxis(-2, -1)).solution.moveaxis(-2, -1).squeeze(0)
 
+        # Set the new values concerned by the control points.
+        self.nCps = newNCps
+        self.splines = newSplines
+        self.cps = nn.Parameter(newCps)
+        #Now KANLayer is updated with the new control points that were initialized with the least square solution of the previous control points.
 
-        # #We compute the interpolation of the various functions defined by their fourier coefficient for each input coordinates and we sum them
-        # y =  torch.sum(c * self.fouriercoeffs[0:1], (-2, -1))
-        # y += torch.sum(s * self.fouriercoeffs[1:2], (-2, -1))
-        # if self.addbias:
-        #     y += self.bias
-        # #End fuse
-
-        #You can use einsum instead to reduce memory usage
-        #It stills not as good as fully fused but it should help
-        #einsum is usually slower though
-        c = torch.reshape(c, (1, x.shape[0], x.shape[1], self.gridsize))
-        s = torch.reshape(s, (1, x.shape[0], x.shape[1], self.gridsize))
-        y = torch.einsum("dbik,djik->bj", torch.concat([c, s], axis=0), self.fouriercoeffs)
-        if self.addbias:
-            y += self.bias
-
-        y = y.view(outshape)
-        return y
+    def forward(self, x):
+        # x : (B, inDim)
+        return (
+            (
+                self.w[0] * self.splines(x.unsqueeze(-1), self.cps)
+                + self.w[1] * self.silu(x).unsqueeze(-1).unsqueeze(-1)
+            )
+            .sum(-3)
+            .squeeze(-1)
+        )
